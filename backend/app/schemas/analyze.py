@@ -18,7 +18,7 @@ class AnalyzeRequest(BaseModel):
     )
     model_provider: Optional[str] = Field(
         default=None,
-        description="Optional primary LLM provider override ('claude' or 'openai')",
+        description="Optional primary LLM provider override ('claude', 'openai', or 'gemini')",
     )
 
 

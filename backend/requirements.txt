@@ -13,6 +13,7 @@ langgraph>=0.0.30
 langchain-core>=0.1.30
 langchain-anthropic>=0.1.5
 langchain-openai>=0.1.1
+langchain-google-genai>=1.0.0
 
 # Web Search Provider
 tavily-python>=0.3.0

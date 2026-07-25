@@ -52,7 +52,7 @@ async def verify_claim(
     Args:
         claim: Claim object to verify.
         sources: List of retrieved Source objects.
-        provider: Optional LLM provider override ('claude' or 'openai').
+        provider: Optional LLM provider override ('claude', 'openai', or 'gemini').
 
     Returns:
         Claim: Updated Claim domain object with verdict, confidence, reasoning, and source pointers.
@@ -73,6 +73,8 @@ async def verify_claim(
             base_llm = llm_factory.get_openai(temperature=0.0)
         elif provider_clean == "claude":
             base_llm = llm_factory.get_anthropic(temperature=0.0)
+        elif provider_clean == "gemini":
+            base_llm = llm_factory.get_gemini(temperature=0.0)
         else:
             base_llm = llm_factory.get_default_llm(temperature=0.0)
 

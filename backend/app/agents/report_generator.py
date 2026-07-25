@@ -42,7 +42,7 @@ async def generate_report(
         claims: Verified list of Claim objects.
         sources: List of retrieved Source objects.
         contradictions: List of detected Contradiction objects.
-        provider: Optional LLM provider override ('claude' or 'openai').
+        provider: Optional LLM provider override ('claude', 'openai', or 'gemini').
 
     Returns:
         str: Generated Markdown report string.
@@ -82,6 +82,8 @@ async def generate_report(
             base_llm = llm_factory.get_openai(temperature=0.2)
         elif provider_clean == "claude":
             base_llm = llm_factory.get_anthropic(temperature=0.2)
+        elif provider_clean == "gemini":
+            base_llm = llm_factory.get_gemini(temperature=0.2)
         else:
             base_llm = llm_factory.get_default_llm(temperature=0.2)
 

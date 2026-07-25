@@ -1,5 +1,5 @@
 """
-LLM Factory service for initializing provider-agnostic Chat Model clients (Claude & OpenAI).
+LLM Factory service for initializing provider-agnostic Chat Model clients (Claude, OpenAI & Gemini).
 Configured via app.core.config.settings with lazy initialization, caching, and key validation.
 """
 
@@ -8,6 +8,7 @@ import logging
 from typing import Dict, Optional, Tuple, Type
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
 from app.core.config import settings
@@ -19,6 +20,7 @@ class LLMProvider(str, Enum):
     """Supported LLM Providers."""
     CLAUDE = "claude"
     OPENAI = "openai"
+    GEMINI = "gemini"
 
 
 # Cache key tuple structure: (provider_name, model_name, temperature, streaming)
@@ -27,7 +29,7 @@ CacheKey = Tuple[str, str, float, bool]
 
 class LLMFactory:
     """
-    Singleton LLM Factory supporting dynamic lazy instantiation of Anthropic and OpenAI chat models.
+    Singleton LLM Factory supporting dynamic lazy instantiation of Anthropic, OpenAI, and Gemini chat models.
     """
 
     _instance: Optional["LLMFactory"] = None
@@ -76,12 +78,20 @@ class LLMFactory:
                 f"Initializing new {provider.value.title()} chat client: "
                 f"model='{model_name}', temp={temperature}, streaming={streaming}"
             )
-            self._client_cache[cache_key] = client_cls(
-                model=model_name,
-                api_key=api_key,
-                temperature=temperature,
-                streaming=streaming,
-            )
+            if issubclass(client_cls, ChatGoogleGenerativeAI):
+                self._client_cache[cache_key] = client_cls(
+                    model=model_name,
+                    google_api_key=api_key,
+                    temperature=temperature,
+                    streaming=streaming,
+                )
+            else:
+                self._client_cache[cache_key] = client_cls(
+                    model=model_name,
+                    api_key=api_key,
+                    temperature=temperature,
+                    streaming=streaming,
+                )
 
         return self._client_cache[cache_key]
 
@@ -96,6 +106,9 @@ class LLMFactory:
         """
         selected_model = model_name or settings.CLAUDE_MODEL_NAME
         api_key = settings.anthropic_api_key_str
+
+        print("USING PROVIDER: claude")
+        logger.info("USING PROVIDER: claude")
 
         return self._get_or_create_client(
             provider=LLMProvider.CLAUDE,
@@ -118,6 +131,9 @@ class LLMFactory:
         selected_model = model_name or settings.OPENAI_MODEL_NAME
         api_key = settings.openai_api_key_str
 
+        print("USING PROVIDER: openai")
+        logger.info("USING PROVIDER: openai")
+
         return self._get_or_create_client(
             provider=LLMProvider.OPENAI,
             model_name=selected_model,
@@ -127,23 +143,49 @@ class LLMFactory:
             client_cls=ChatOpenAI,
         )  # type: ignore[return-value]
 
+    def get_gemini(
+        self,
+        model_name: Optional[str] = None,
+        temperature: float = 0.0,
+        streaming: bool = False,
+    ) -> ChatGoogleGenerativeAI:
+        """
+        Lazily initializes and returns a Google Gemini ChatGoogleGenerativeAI model instance.
+        """
+        selected_model = model_name or settings.GEMINI_MODEL_NAME
+        api_key = settings.google_api_key_str
+
+        print(f"USING PROVIDER: gemini\nMODEL: {selected_model}")
+        logger.info(f"USING PROVIDER: gemini | MODEL: {selected_model}")
+
+        return self._get_or_create_client(
+            provider=LLMProvider.GEMINI,
+            model_name=selected_model,
+            temperature=temperature,
+            streaming=streaming,
+            api_key=api_key,
+            client_cls=ChatGoogleGenerativeAI,
+        )  # type: ignore[return-value]
+
     def get_default_llm(
         self,
         temperature: float = 0.0,
         streaming: bool = False,
     ) -> BaseChatModel:
         """
-        Returns the primary LLM model based on settings.DEFAULT_LLM_PROVIDER ('claude' or 'openai').
+        Returns the primary LLM model based on settings.DEFAULT_LLM_PROVIDER ('claude', 'openai', or 'gemini').
         """
         provider_str = settings.DEFAULT_LLM_PROVIDER.lower()
         if provider_str == LLMProvider.CLAUDE.value:
             return self.get_anthropic(temperature=temperature, streaming=streaming)
         elif provider_str == LLMProvider.OPENAI.value:
             return self.get_openai(temperature=temperature, streaming=streaming)
+        elif provider_str == LLMProvider.GEMINI.value:
+            return self.get_gemini(temperature=temperature, streaming=streaming)
         else:
             logger.error(f"Unsupported LLM provider configured: {provider_str}")
             raise ValueError(
-                f"Unsupported DEFAULT_LLM_PROVIDER '{provider_str}'. Expected 'claude' or 'openai'."
+                f"Unsupported DEFAULT_LLM_PROVIDER '{provider_str}'. Expected 'claude', 'openai', or 'gemini'."
             )
 
 

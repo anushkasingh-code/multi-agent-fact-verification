@@ -45,7 +45,7 @@ async def extract_claims(query: str, provider: Optional[str] = None) -> List[Cla
 
     Args:
         query: Research query string.
-        provider: Optional LLM provider override ('claude' or 'openai').
+        provider: Optional LLM provider override ('claude', 'openai', or 'gemini').
 
     Returns:
         List[Claim]: List of Claim domain objects with deterministic IDs (claim_01, claim_02, ...).
@@ -61,6 +61,8 @@ async def extract_claims(query: str, provider: Optional[str] = None) -> List[Cla
             base_llm = llm_factory.get_openai(temperature=0.0)
         elif provider_clean == "claude":
             base_llm = llm_factory.get_anthropic(temperature=0.0)
+        elif provider_clean == "gemini":
+            base_llm = llm_factory.get_gemini(temperature=0.0)
         else:
             base_llm = llm_factory.get_default_llm(temperature=0.0)
 

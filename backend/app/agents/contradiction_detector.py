@@ -42,7 +42,7 @@ async def detect_contradictions(
     Args:
         claims: Verified list of Claim objects.
         sources: List of retrieved Source objects.
-        provider: Optional LLM provider override ('claude' or 'openai').
+        provider: Optional LLM provider override ('claude', 'openai', or 'gemini').
 
     Returns:
         List[Contradiction]: List of Contradiction domain objects.
@@ -62,6 +62,8 @@ async def detect_contradictions(
             base_llm = llm_factory.get_openai(temperature=0.0)
         elif provider_clean == "claude":
             base_llm = llm_factory.get_anthropic(temperature=0.0)
+        elif provider_clean == "gemini":
+            base_llm = llm_factory.get_gemini(temperature=0.0)
         else:
             base_llm = llm_factory.get_default_llm(temperature=0.0)
 
