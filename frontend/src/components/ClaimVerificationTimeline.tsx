@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ClaimItem } from "../types";
+import { useAnalysisContext } from "../context/AnalysisContext";
 import {
   ShieldCheck,
   CheckCircle2,
@@ -161,10 +162,21 @@ export function ClaimVerificationTimeline() {
     },
   ];
 
-  const [claims, setClaims] = useState<ClaimItem[]>(initialClaims);
-  const [expandedId, setExpandedId] = useState<string | null>("claim-1");
+  const { computedClaims } = useAnalysisContext();
+  const activeClaims = computedClaims.length > 0 ? computedClaims : initialClaims;
+
+  const [claims, setClaims] = useState<ClaimItem[]>(activeClaims);
+  const [expandedId, setExpandedId] = useState<string | null>(activeClaims[0]?.id || "claim-1");
   const [isVerifyingAll, setIsVerifyingAll] = useState(false);
   const [currentVerifyingIndex, setCurrentVerifyingIndex] = useState<number | null>(null);
+
+  // Sync state if computedClaims updates
+  useEffect(() => {
+    if (computedClaims.length > 0) {
+      setClaims(computedClaims);
+      setExpandedId(computedClaims[0].id);
+    }
+  }, [computedClaims]);
 
   const handleRunVerificationAnimation = () => {
     setIsVerifyingAll(true);

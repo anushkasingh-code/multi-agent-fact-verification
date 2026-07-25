@@ -1,5 +1,9 @@
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { ResearchResult, AgentLog } from "../types";
+import { useAnalysisContext } from "../context/AnalysisContext";
+import { executeResearchAnalysis, transformAnalyzeResponseToResearchResult } from "../api";
+import { EnterpriseReportView } from "./EnterpriseReportView";
 import {
   Sparkles,
   Search,
@@ -49,51 +53,32 @@ export function ResearchView({ onSaveToVault }: ResearchViewProps) {
     { name: "Synthesizer", action: "Compiling verified report & footnotes", icon: ShieldCheck },
   ];
 
-  const handleRunResearch = async (searchQuery: string) => {
-    if (!searchQuery.trim()) return;
-    setLoading(true);
-    setResult(null);
-    setSaved(false);
-    setActiveStep(1);
-    setCurrentLogs([
-      { agent: "Analyst", message: `Deconstructing research query: "${searchQuery}"` },
-    ]);
+  const { latestResponse, setLatestResponse, selectedModelProvider } = useAnalysisContext();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-    // Simulated progress updates for smooth feedback
-    const timer1 = setTimeout(() => {
-      setActiveStep(2);
-      setCurrentLogs((prev) => [
-        ...prev,
-        { agent: "Scraper", message: "Extracting 18 primary datasets from IEEE Xplore, PubMed & arXiv..." },
-      ]);
-    }, 1200);
-
-    const timer2 = setTimeout(() => {
-      setActiveStep(3);
-      setCurrentLogs((prev) => [
-        ...prev,
-        { agent: "Logic Critic", message: "Isolating model fantasies & unbacked scaling assumptions..." },
-      ]);
-    }, 2400);
-
-    const timer3 = setTimeout(() => {
-      setActiveStep(4);
-      setCurrentLogs((prev) => [
-        ...prev,
-        { agent: "Fact Validator", message: "Matching atomic claims against verified DOI ledger..." },
-      ]);
-    }, 3600);
-
-    try {
-      const res = await fetch("/api/research", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: searchQuery, depth }),
-      });
-
-      const data = await res.json();
-
-      setTimeout(() => {
+  const researchMutation = useMutation({
+    mutationFn: (searchQuery: string) =>
+      executeResearchAnalysis({
+        query: searchQuery,
+        model_provider: selectedModelProvider,
+      }),
+    onSuccess: (data) => {
+      setLatestResponse(data);
+      setActiveStep(5);
+      const formattedResult = transformAnalyzeResponseToResearchResult(data);
+      setResult(formattedResult);
+      setLoading(false);
+    },
+    onError: async (error: any, searchQuery: string) => {
+      console.warn("Backend analysis API unavailable or failed. Retrying fallback server endpoint:", error);
+      try {
+        // Fallback to local server.ts endpoint if main FastAPI endpoint fails
+        const res = await fetch("/api/research", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: searchQuery, depth }),
+        });
+        const data = await res.json();
         setActiveStep(5);
         setResult({
           id: `res-${Date.now()}`,
@@ -102,24 +87,57 @@ export function ResearchView({ onSaveToVault }: ResearchViewProps) {
           status: data.status || "VERIFIED",
           hallucinationsCaught: data.hallucinationsCaught || 2,
           sourcesConsulted: data.sourcesConsulted || 18,
-          agentLogs: data.agentLogs || [
-            { agent: "Analyst", message: "Deconstructed query into 4 core claims." },
-            { agent: "Scraper", message: "Scraped 18 primary references." },
-            { agent: "Logic Critic", message: "Caught 2 speculative extrapolations." },
-            { agent: "Fact Validator", message: "Verified remaining claims against DOI ledger." },
-            { agent: "Synthesizer", message: "Compiled finalized cited report." },
-          ],
+          agentLogs: data.agentLogs || [],
           findings: data.findings || "No findings generated.",
           citations: data.citations || [],
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           category: "Advanced Technology",
         });
+      } catch (fallbackErr: any) {
+        setErrorMessage(error?.response?.data?.detail || error.message || "Research analysis failed");
+      } finally {
         setLoading(false);
-      }, 4800);
-    } catch (err) {
-      console.error("Research API error:", err);
-      setLoading(false);
-    }
+      }
+    },
+  });
+
+  const handleRunResearch = async (searchQuery: string) => {
+    if (!searchQuery.trim()) return;
+    setLoading(true);
+    setErrorMessage(null);
+    setResult(null);
+    setSaved(false);
+    setActiveStep(1);
+    setCurrentLogs([
+      { agent: "Analyst", message: `Deconstructing research query: "${searchQuery}"` },
+    ]);
+
+    const timer1 = setTimeout(() => {
+      setActiveStep(2);
+      setCurrentLogs((prev) => [
+        ...prev,
+        { agent: "Scraper", message: "Extracting primary web evidence using Tavily Search..." },
+      ]);
+    }, 1200);
+
+    const timer2 = setTimeout(() => {
+      setActiveStep(3);
+      setCurrentLogs((prev) => [
+        ...prev,
+        { agent: "Logic Critic", message: "Cross-examining sources for contradictions & hallucinations..." },
+      ]);
+    }, 2400);
+
+    const timer3 = setTimeout(() => {
+      setActiveStep(4);
+      setCurrentLogs((prev) => [
+        ...prev,
+        { agent: "Fact Validator", message: "Verifying atomic claims against retrieved evidence vector index..." },
+      ]);
+    }, 3600);
+
+    // Trigger backend FastAPI research pipeline
+    researchMutation.mutate(searchQuery);
   };
 
   const handleCopyReport = () => {
@@ -270,113 +288,16 @@ export function ResearchView({ onSaveToVault }: ResearchViewProps) {
       {/* Results View */}
       {result && !loading && (
         <div className="space-y-8 animate-in fade-in duration-500">
-          {/* Top Metric Bar */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="glass-card rounded-xl p-5 border border-gray-200 bg-white shadow-xs flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 uppercase font-semibold">Veracity Rating</p>
-                <p className="text-2xl font-extrabold text-emerald-600 mt-1">
-                  {result.veracityScore}%
-                </p>
-              </div>
-              <ShieldCheck className="w-8 h-8 text-emerald-600" />
-            </div>
-
-            <div className="glass-card rounded-xl p-5 border border-gray-200 bg-white shadow-xs flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 uppercase font-semibold">Hallucinations Caught</p>
-                <p className="text-2xl font-extrabold text-red-600 mt-1">
-                  {result.hallucinationsCaught} Isolated
-                </p>
-              </div>
-              <AlertTriangle className="w-8 h-8 text-red-500" />
-            </div>
-
-            <div className="glass-card rounded-xl p-5 border border-gray-200 bg-white shadow-xs flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 uppercase font-semibold">Sources Consulted</p>
-                <p className="text-2xl font-extrabold text-[#4F46E5] mt-1">
-                  {result.sourcesConsulted} Literature
-                </p>
-              </div>
-              <FileText className="w-8 h-8 text-[#4F46E5]" />
-            </div>
-
-            <div className="glass-card rounded-xl p-5 border border-gray-200 bg-white shadow-xs flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 uppercase font-semibold">Verification Status</p>
-                <p className="text-lg font-bold text-purple-700 mt-1 uppercase">
-                  {result.status}
-                </p>
-              </div>
-              <CheckCircle2 className="w-8 h-8 text-purple-600" />
-            </div>
-          </div>
-
-          {/* Main Report Document */}
-          <div className="glass-card rounded-2xl p-8 border border-gray-200 bg-white shadow-md space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-6">
-              <div>
-                <span className="px-2.5 py-0.5 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold">
-                  Synthesized Research Report
-                </span>
-                <h2 className="text-2xl font-bold text-gray-900 mt-2">{result.query}</h2>
-              </div>
-
-              {/* Action Toolbar */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleSave}
-                  disabled={saved}
-                  className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-800 text-xs font-semibold rounded-lg border border-gray-300 transition-all flex items-center gap-1.5 shadow-xs"
-                >
-                  <BookmarkPlus className="w-4 h-4 text-[#4F46E5]" />
-                  <span>{saved ? "Saved in Vault" : "Save to Vault"}</span>
-                </button>
-
-                <button
-                  onClick={handleCopyReport}
-                  className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-800 text-xs font-semibold rounded-lg border border-gray-300 transition-all flex items-center gap-1.5 shadow-xs"
-                >
-                  {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-gray-600" />}
-                  <span>{copied ? "Copied" : "Copy Report"}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Findings Content */}
-            <div className="prose max-w-none text-gray-800 leading-relaxed whitespace-pre-wrap font-sans text-sm md:text-base space-y-4">
-              {result.findings}
-            </div>
-
-            {/* Footnotes & Citations */}
-            {result.citations && result.citations.length > 0 && (
-              <div className="pt-6 border-t border-gray-200 space-y-3">
-                <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider">
-                  Autonomous Citation Ledger ({result.citations.length})
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {result.citations.map((cite, i) => (
-                    <a
-                      key={i}
-                      href={cite.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-3 rounded-xl bg-gray-50 hover:bg-indigo-50/50 border border-gray-200 transition-all flex items-start justify-between gap-3 text-xs group"
-                    >
-                      <div className="space-y-1">
-                        <span className="font-mono font-bold text-[#4F46E5]">{cite.ref}</span>
-                        <p className="text-gray-800 font-medium group-hover:text-indigo-900 transition-colors">
-                          {cite.title}
-                        </p>
-                      </div>
-                      <ExternalLink className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#06B6D4] shrink-0 mt-0.5" />
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <EnterpriseReportView
+            query={result.query}
+            markdownReport={result.findings}
+            claims={latestResponse?.claims as any}
+            sources={latestResponse?.sources as any}
+            contradictions={latestResponse?.contradictions as any}
+            timestamp={result.timestamp}
+            onSaveToVault={handleSave}
+            onCopyReport={handleCopyReport}
+          />
         </div>
       )}
     </div>

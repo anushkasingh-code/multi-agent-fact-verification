@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { GraphNode, GraphEdge } from "../types";
+import { useAnalysisContext } from "../context/AnalysisContext";
 import {
   Share2,
   Maximize2,
@@ -163,8 +164,10 @@ export function InteractiveKnowledgeGraph() {
     { id: "e8", source: "node-paper1", target: "node-gov1", status: "verified" },
   ];
 
-  const [nodes] = useState<GraphNode[]>(initialNodes);
-  const [edges] = useState<GraphEdge[]>(initialEdges);
+  const { computedGraphNodes, computedGraphEdges } = useAnalysisContext();
+  const nodes = computedGraphNodes.length > 0 ? computedGraphNodes : initialNodes;
+  const edges = computedGraphEdges.length > 0 ? computedGraphEdges : initialEdges;
+
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [filterType, setFilterType] = useState<string>("all");

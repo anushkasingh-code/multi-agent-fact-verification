@@ -27,17 +27,44 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
+import { useAnalysisContext } from "../context/AnalysisContext";
+
 interface DashboardViewProps {
   onTabChange: (tab: NavigationTab) => void;
   onOpenDemo: () => void;
 }
 
 export function DashboardView({ onTabChange, onOpenDemo }: DashboardViewProps) {
+  const { latestResponse, computedResearchResult } = useAnalysisContext();
   const [copiedCitation, setCopiedCitation] = useState(false);
   const [activeWorkflowStep, setActiveWorkflowStep] = useState<number | null>(null);
 
   // Export Feature State
   const sampleExportReports = [
+    ...(latestResponse && computedResearchResult
+      ? [
+          {
+            id: `report-${latestResponse.job_id}`,
+            title: `Live Analysis: ${latestResponse.query}`,
+            topic: "Multi-Agent Research Pipeline",
+            confidenceScore: computedResearchResult.veracityScore,
+            status: computedResearchResult.status,
+            hallucinationsCount: latestResponse.summary?.contradictions_detected ?? 0,
+            sourcesCount: latestResponse.summary?.total_sources ?? 0,
+            timestamp: new Date().toISOString().split("T")[0],
+            summary: latestResponse.report_markdown?.slice(0, 350) + "..." || latestResponse.query,
+            findings: (latestResponse.claims || []).map((c) => `[${c.verdict || "CLAIM"}]: ${c.text}`),
+            citations: (latestResponse.sources || []).map((s, i) => ({
+              ref: `[${i + 1}]`,
+              title: s.title || s.url,
+              source: s.domain || "Web Source",
+              doi: s.url,
+              url: s.url,
+            })),
+            auditLogs: (computedResearchResult.agentLogs || []).map((l) => `[${l.agent}]: ${l.message}`),
+          },
+        ]
+      : []),
     {
       id: "report-qec",
       title: "Quantum Error Correction Fault-Tolerance & Surface Code Benchmarks",

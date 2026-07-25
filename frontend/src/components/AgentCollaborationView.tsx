@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { CollaborationMessage } from "../types";
+import { useAnalysisContext } from "../context/AnalysisContext";
 import {
   Users,
   Play,
@@ -118,6 +119,9 @@ export function AgentCollaborationView() {
     },
   ];
 
+  const { computedCollaborationMessages } = useAnalysisContext();
+  const activeThread = computedCollaborationMessages.length > 0 ? computedCollaborationMessages : initialThread;
+
   const [visibleCount, setVisibleCount] = useState(1);
   const [isPlaying, setIsPlaying] = useState(true);
   const [selectedScenario, setSelectedScenario] = useState(sampleScenarios[0]);
@@ -126,7 +130,7 @@ export function AgentCollaborationView() {
   useEffect(() => {
     if (!isPlaying) return;
 
-    if (visibleCount < initialThread.length) {
+    if (visibleCount < activeThread.length) {
       const timer = setTimeout(() => {
         setVisibleCount((prev) => prev + 1);
       }, speedMs);
@@ -134,7 +138,7 @@ export function AgentCollaborationView() {
     } else {
       setIsPlaying(false);
     }
-  }, [visibleCount, isPlaying, speedMs]);
+  }, [visibleCount, isPlaying, speedMs, activeThread]);
 
   const handleReplay = () => {
     setVisibleCount(1);
@@ -256,7 +260,7 @@ export function AgentCollaborationView() {
           <div>
             <span className="text-gray-500 block">Swarm Status</span>
             <span className="text-indigo-700 font-bold">
-              {visibleCount === initialThread.length ? "SYNTHESIS COMPLETE" : `STEP ${visibleCount} OF 5 RUNNING`}
+              {visibleCount === activeThread.length ? "SYNTHESIS COMPLETE" : `STEP ${visibleCount} OF ${activeThread.length} RUNNING`}
             </span>
           </div>
         </div>
@@ -264,7 +268,7 @@ export function AgentCollaborationView() {
 
       {/* Collaborative Workspace Feed */}
       <div className="space-y-6 relative before:absolute before:left-6 before:top-6 before:bottom-6 before:w-0.5 before:bg-gray-200">
-        {initialThread.slice(0, visibleCount).map((msg, index) => {
+        {activeThread.slice(0, visibleCount).map((msg, index) => {
           return (
             <div
               key={msg.id}
@@ -342,7 +346,7 @@ export function AgentCollaborationView() {
       </div>
 
       {/* Completion Banner */}
-      {visibleCount === initialThread.length && (
+      {visibleCount === activeThread.length && (
         <div className="p-6 rounded-2xl bg-emerald-50 border border-emerald-200 flex flex-col md:flex-row items-center justify-between gap-4 animate-in fade-in duration-500 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-300 flex items-center justify-center text-emerald-800">

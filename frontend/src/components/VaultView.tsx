@@ -13,15 +13,25 @@ import {
   Layers,
 } from "lucide-react";
 
+import { useAnalysisContext } from "../context/AnalysisContext";
+
 interface VaultViewProps {
   items: VaultItem[];
   onDeleteItem: (id: string) => void;
 }
 
 export function VaultView({ items, onDeleteItem }: VaultViewProps) {
+  const { vaultItems: contextVaultItems, deleteVaultItem: contextDeleteVaultItem } = useAnalysisContext();
+  const allItems = [...contextVaultItems, ...items.filter((i) => !contextVaultItems.some((c) => c.id === i.id))];
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDomain, setSelectedDomain] = useState("All");
   const [activeItem, setActiveItem] = useState<VaultItem | null>(null);
+
+  const handleDelete = (id: string) => {
+    contextDeleteVaultItem(id);
+    onDeleteItem(id);
+  };
 
   const domains = [
     "All",
@@ -31,7 +41,7 @@ export function VaultView({ items, onDeleteItem }: VaultViewProps) {
     "Macroeconomics",
   ];
 
-  const filteredItems = items.filter((item) => {
+  const filteredItems = allItems.filter((item) => {
     const matchesSearch =
       item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.query.toLowerCase().includes(searchTerm.toLowerCase());
@@ -140,7 +150,7 @@ export function VaultView({ items, onDeleteItem }: VaultViewProps) {
                     Inspect
                   </button>
                   <button
-                    onClick={() => onDeleteItem(item.id)}
+                    onClick={() => handleDelete(item.id)}
                     className="p-1.5 hover:bg-rose-50 text-gray-400 hover:text-rose-600 rounded-lg transition-colors"
                     title="Delete Record"
                   >

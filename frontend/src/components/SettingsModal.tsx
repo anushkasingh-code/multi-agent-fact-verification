@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { X, Settings, ShieldCheck, Check, Server, RefreshCw } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { X, Settings, Server, Check, Activity, Cpu } from "lucide-react";
+import { fetchHealthCheck } from "../api";
+import { useAnalysisContext } from "../context/AnalysisContext";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -7,10 +10,19 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
+  const { selectedModelProvider, setSelectedModelProvider } = useAnalysisContext();
   const [autoSave, setAutoSave] = useState(true);
   const [latexFormatting, setLatexFormatting] = useState(true);
   const [strictnessLevel, setStrictnessLevel] = useState("high");
   const [saved, setSaved] = useState(false);
+
+  // TanStack Query for backend GET /api/v1/health status
+  const { data: healthData, isLoading: healthLoading, isError: healthError } = useQuery({
+    queryKey: ["healthCheck"],
+    queryFn: fetchHealthCheck,
+    enabled: isOpen, // Only query when settings modal is opened
+    refetchInterval: 15000, // Poll every 15 seconds
+  });
 
   if (!isOpen) return null;
 
@@ -19,7 +31,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setTimeout(() => {
       setSaved(false);
       onClose();
-    }, 1000);
+    }, 800);
   };
 
   return (
@@ -36,23 +48,71 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <Settings className="w-6 h-6 text-[#4F46E5]" />
           <div>
             <h2 className="text-xl font-bold text-gray-900">VeriSphere Configuration</h2>
-            <p className="text-xs text-gray-500">Manage agent parameters and server integration.</p>
+            <p className="text-xs text-gray-500">Manage multi-agent LLM parameters and backend API integration.</p>
           </div>
         </div>
 
         <div className="space-y-4">
-          {/* Server Connection Status */}
-          <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2.5">
-              <Server className="w-4 h-4 text-[#06B6D4]" />
-              <div>
-                <p className="font-bold text-gray-900">Server-Side Gemini API</p>
-                <p className="text-gray-500">Configured via Settings Secrets</p>
+          {/* Server Connection Status via GET /api/v1/health */}
+          <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200 space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Server className="w-4 h-4 text-[#06B6D4]" />
+                <div>
+                  <p className="font-bold text-gray-900">FastAPI Backend (v1 API)</p>
+                  <p className="text-gray-500">http://localhost:8000/api/v1</p>
+                </div>
               </div>
+              <span
+                className={`px-2.5 py-0.5 rounded-md font-bold text-[11px] border ${
+                  healthData && !healthError
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : healthLoading
+                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                    : "bg-rose-50 text-rose-700 border-rose-200"
+                }`}
+              >
+                {healthData && !healthError
+                  ? "CONNECTED"
+                  : healthLoading
+                  ? "CHECKING..."
+                  : "OFFLINE (FALLBACK ACTIVE)"}
+              </span>
             </div>
-            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
-              Active
-            </span>
+
+            {healthData && (
+              <div className="pt-2 border-t border-gray-200 flex items-center justify-between font-mono text-[11px] text-gray-600">
+                <span>MongoDB: <strong className="text-emerald-700">{healthData.mongodb}</strong></span>
+                <span>Status: <strong className="text-emerald-700">{healthData.status}</strong></span>
+              </div>
+            )}
+          </div>
+
+          {/* Model Provider Selection */}
+          <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200 space-y-2">
+            <div className="flex items-center gap-2 text-xs font-semibold text-gray-900">
+              <Cpu className="w-4 h-4 text-[#4F46E5]" />
+              <span>Primary LLM Provider Engine</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: "gemini", label: "Gemini 2.5 Flash" },
+                { id: "claude", label: "Claude 3.5 Sonnet" },
+                { id: "openai", label: "GPT-4o" },
+              ].map((prov) => (
+                <button
+                  key={prov.id}
+                  onClick={() => setSelectedModelProvider(prov.id)}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold transition-all border ${
+                    selectedModelProvider === prov.id
+                      ? "bg-[#4F46E5] text-white border-indigo-600 shadow-xs"
+                      : "bg-white text-gray-700 border-gray-200 hover:bg-gray-100"
+                  }`}
+                >
+                  {prov.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Settings Options */}
