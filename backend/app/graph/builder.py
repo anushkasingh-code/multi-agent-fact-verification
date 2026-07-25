@@ -59,7 +59,7 @@ async def search_retriever_node(state: AgentState) -> Dict[str, Any]:
 
 async def fact_verifier_node(state: AgentState) -> Dict[str, Any]:
     """
-    Fact Verification Node: Cross-checks claims against retrieved sources.
+    Fact Verification Node: Cross-checks claims against retrieved sources using single BATCH call.
     """
     job_id = state.get("job_id", "")
     claims = state.get("claims", [])
@@ -67,23 +67,18 @@ async def fact_verifier_node(state: AgentState) -> Dict[str, Any]:
     provider = state.get("model_provider")
     print(f"DEBUG: Entering fact_verifier_node for job_id='{job_id}' with {len(claims)} claims and {len(sources)} sources")
 
-    verified_claims: List[Claim] = []
     errors = list(state.get("errors", []))
 
-    for claim in claims:
-        try:
-            verified_claim = await verify_claim(claim=claim, sources=sources, provider=provider)
-            verified_claims.append(verified_claim)
-        except Exception as e:
-            logger.error(f"[Node: fact_verifier] Error verifying claim '{claim.id}': {e}", exc_info=True)
-            print(f"DEBUG: Error verifying claim '{claim.id}': {e}")
-            claim.verdict = "INCONCLUSIVE"
-            claim.reasoning = f"Verification failed: {str(e)}"
-            verified_claims.append(claim)
-            errors.append(f"Verification error for claim {claim.id}: {str(e)}")
-
-    print(f"DEBUG: Exiting fact_verifier_node with {len(verified_claims)} verified claims for job_id='{job_id}'")
-    return {"claims": verified_claims, "errors": errors}
+    try:
+        from app.agents.fact_verifier import verify_claims_batch
+        verified_claims = await verify_claims_batch(claims=claims, sources=sources, job_id=job_id, provider=provider)
+        print(f"DEBUG: Exiting fact_verifier_node with {len(verified_claims)} verified claims for job_id='{job_id}'")
+        return {"claims": verified_claims, "errors": errors}
+    except Exception as e:
+        logger.error(f"[Node: fact_verifier] Failed for job_id='{job_id}': {e}", exc_info=True)
+        print(f"DEBUG: Error in fact_verifier_node: {e}")
+        errors.append(f"Fact verification failed: {str(e)}")
+        return {"claims": claims, "errors": errors}
 
 
 async def contradiction_detector_node(state: AgentState) -> Dict[str, Any]:

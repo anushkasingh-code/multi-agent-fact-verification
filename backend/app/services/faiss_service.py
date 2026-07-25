@@ -186,6 +186,27 @@ class FAISSService:
             logger.error(f"Failed search on FAISS index '{index_id}': {e}", exc_info=True)
             raise RuntimeError(f"Search failed on FAISS index '{index_id}': {str(e)}") from e
 
+    def search_similar(self, index_id: str, query: str, k: int = 3) -> List[Dict[str, Any]]:
+        """
+        Embeds query text and executes similarity search against target FAISS index.
+        Returns list of metadata dicts flattened with similarity score.
+        """
+        if not self.has_index(index_id) or not query:
+            return []
+        try:
+            from app.services.embedding_service import embedding_service
+            query_vector = embedding_service.embed_text(query)
+            raw_results = self.search(index_id=index_id, query_vector=query_vector, top_k=k)
+            flattened: List[Dict[str, Any]] = []
+            for item in raw_results:
+                meta = dict(item.get("metadata", {}))
+                meta["score"] = item.get("score", 0.0)
+                flattened.append(meta)
+            return flattened
+        except Exception as e:
+            logger.warning(f"search_similar failed for index '{index_id}': {e}")
+            return []
+
     def delete_index(self, index_id: str) -> bool:
         """
         Deletes a FAISS index container and frees associated memory.

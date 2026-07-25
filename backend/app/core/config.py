@@ -23,12 +23,18 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[SecretStr] = Field(default=None, description="OpenAI API Key")
     ANTHROPIC_API_KEY: Optional[SecretStr] = Field(default=None, description="Anthropic API Key")
     GOOGLE_API_KEY: Optional[SecretStr] = Field(default=None, description="Google Gemini API Key")
-    DEFAULT_LLM_PROVIDER: Literal["claude", "openai", "gemini"] = Field(
-        default="gemini", description="Primary LLM provider to use for agent reasoning"
+    GROQ_API_KEY: Optional[SecretStr] = Field(default=None, description="Groq API Key")
+    LLM_PROVIDER: Optional[str] = Field(default=None, description="LLM provider alias")
+    DEFAULT_LLM_PROVIDER: Literal["claude", "openai", "gemini", "groq"] = Field(
+        default="groq", description="Primary LLM provider to use for agent reasoning"
     )
     CLAUDE_MODEL_NAME: str = Field(default="claude-3-5-sonnet-20241022", description="Claude model identifier")
+    OPENAI_MODEL: Optional[str] = Field(default=None, description="OpenAI model identifier alias")
     OPENAI_MODEL_NAME: str = Field(default="gpt-4o", description="OpenAI model identifier")
-    GEMINI_MODEL_NAME: str = Field(default="gemini-3.1-flash-lite", description="Gemini model identifier")
+    GEMINI_MODEL_NAME: str = Field(default="gemini-2.5-flash", description="Gemini model identifier")
+    GEMINI_MODEL: Optional[str] = Field(default=None, description="Gemini model identifier alias")
+    GROQ_MODEL: Optional[str] = Field(default=None, description="Groq model identifier alias")
+    GROQ_MODEL_NAME: str = Field(default="llama-3.3-70b-versatile", description="Groq model identifier")
 
     # Search Provider
     TAVILY_API_KEY: Optional[SecretStr] = Field(default=None, description="Tavily API Key for live web search")
@@ -75,6 +81,32 @@ class Settings(BaseSettings):
     def tavily_api_key_str(self) -> Optional[str]:
         """Returns Tavily API key as plain string if set."""
         return self.TAVILY_API_KEY.get_secret_value() if self.TAVILY_API_KEY else None
+
+    @property
+    def groq_api_key_str(self) -> Optional[str]:
+        """Returns Groq API key as plain string if set."""
+        return self.GROQ_API_KEY.get_secret_value() if self.GROQ_API_KEY else None
+
+    @property
+    def effective_provider(self) -> str:
+        """Returns active LLM provider ('groq', 'openai', 'gemini', 'claude')."""
+        return (self.LLM_PROVIDER or self.DEFAULT_LLM_PROVIDER or "groq").lower().strip()
+
+    @property
+    def effective_groq_model(self) -> str:
+        """Returns Groq model identifier."""
+        return (self.GROQ_MODEL or self.GROQ_MODEL_NAME or "llama-3.3-70b-versatile").strip()
+
+    @property
+    def effective_openai_model(self) -> str:
+        """Returns OpenAI model name."""
+        return (self.OPENAI_MODEL or self.OPENAI_MODEL_NAME or "gpt-4o").strip()
+
+    @property
+    def effective_gemini_model(self) -> str:
+        """Returns normalized Gemini model name without 'models/' prefix."""
+        raw = self.GEMINI_MODEL or self.GEMINI_MODEL_NAME or "gemini-2.5-flash"
+        return raw.replace("models/", "").strip()
 
 
 @lru_cache()

@@ -4,6 +4,7 @@ Configured with CORS middleware, global exception handlers, and routing.
 """
 
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -11,12 +12,52 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
+from app.core.config import settings
+from app.services.llm_factory import llm_factory
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    FastAPI Lifespan Context Manager.
+    Logs selected provider and model settings on application startup.
+    """
+    provider = settings.effective_provider
+    if provider == "groq":
+        model = settings.effective_groq_model
+        factory_name = "ChatGroq"
+    elif provider == "openai":
+        model = settings.effective_openai_model
+        factory_name = "ChatOpenAI"
+    elif provider == "gemini":
+        model = settings.effective_gemini_model
+        factory_name = "ChatGoogleGenerativeAI"
+    else:
+        model = settings.CLAUDE_MODEL_NAME
+        factory_name = "ChatAnthropic"
+
+    print("=====================================")
+    print(f"Provider: {provider}")
+    print(f"Model: {model}")
+    print(f"Factory: {factory_name}")
+    print("=====================================")
+
+    logger.info(f"Startup - Provider: {provider}, Model: {model}, Factory: {factory_name}")
+
+    if provider == "gemini":
+        active_model = llm_factory.get_active_gemini_model()
+        logger.info(f"Validated active Gemini model on startup: '{active_model}'")
+
+    yield
+    logger.info("Shutting down application lifespan...")
+
 
 app = FastAPI(
     title="Autonomous Multi-Agent Research & Fact Verification System",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS Middleware configuration for frontend integration

@@ -1,22 +1,24 @@
 """
 Fact Verification Agent module.
-Evaluates atomic claims against retrieved web evidence context using structured LLM output.
+Evaluates atomic claims against retrieved web evidence context using batch structured LLM output.
 """
 
 import logging
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.agents.prompts.verifier_prompts import FACT_VERIFIER_SYSTEM_PROMPT
 from app.graph.state import Claim, Source
-from app.services.llm_factory import llm_factory
+from app.services.faiss_service import faiss_service
+from app.llm.llm_factory import get_llm
 
 logger = logging.getLogger(__name__)
 
 
-class VerificationVerdict(BaseModel):
-    """Structured Pydantic schema for fact verification verdict."""
+class VerificationVerdictItem(BaseModel):
+    """Structured Pydantic schema for single claim verification verdict in batch."""
+    claim_id: str = Field(..., description="ID of the claim (e.g. 'claim_01')")
     verdict: str = Field(
         ...,
         description="Verification verdict: 'SUPPORTED', 'REFUTED', or 'INCONCLUSIVE'",
@@ -29,7 +31,7 @@ class VerificationVerdict(BaseModel):
     )
     reasoning: str = Field(
         ...,
-        description="Detailed explanation justifying the verdict based on evidence",
+        description="Concise explanation justifying the verdict based on evidence (max 200 chars)",
     )
     supporting_source_ids: List[str] = Field(
         default_factory=list,
@@ -41,53 +43,101 @@ class VerificationVerdict(BaseModel):
     )
 
 
+class BatchVerificationVerdicts(BaseModel):
+    """Container schema for batch verification verdicts for all input claims."""
+    verdicts: List[VerificationVerdictItem] = Field(
+        ...,
+        description="List of verification verdicts matching every input claim ID",
+    )
+
+
 async def verify_claim(
     claim: Claim,
     sources: List[Source],
     provider: Optional[str] = None,
 ) -> Claim:
+    """Legacy single claim wrapper delegating to verify_claims_batch."""
+    results = await verify_claims_batch(claims=[claim], sources=sources, job_id="", provider=provider)
+    return results[0] if results else claim
+
+
+async def verify_claims_batch(
+    claims: List[Claim],
+    sources: List[Source],
+    job_id: str = "",
+    provider: Optional[str] = None,
+) -> List[Claim]:
     """
-    Cross-checks a single claim statement against source snippets using structured LLM inference.
+    Evaluates all claims in a single BATCH LLM call using top-3 FAISS similarity chunks
+    and compressed evidence summaries.
 
     Args:
-        claim: Claim object to verify.
-        sources: List of retrieved Source objects.
-        provider: Optional LLM provider override ('claude', 'openai', or 'gemini').
+        claims: List of Claim domain objects to verify.
+        sources: List of retrieved Source domain objects.
+        job_id: Optional FAISS vector index identifier for similarity search.
+        provider: Optional LLM provider override.
 
     Returns:
-        Claim: Updated Claim domain object with verdict, confidence, reasoning, and source pointers.
+        List[Claim]: Updated Claim domain objects with verdicts, confidence, and reasoning.
     """
-    if not claim or not isinstance(claim, Claim):
-        raise ValueError("Valid Claim object must be provided.")
+    if not claims:
+        return []
 
-    logger.info(f"Verifying claim '{claim.id}': '{claim.text[:50]}...'")
+    logger.info(f"Executing BATCH fact verification for {len(claims)} claims across {len(sources)} sources...")
 
-    context_lines: List[str] = []
-    for src in sources:
-        context_lines.append(f"[{src.id}] ({src.title} - {src.url}):\n{src.snippet}\n")
-    context_text = "\n".join(context_lines) if context_lines else "No web source evidence retrieved."
+    # Build compressed evidence blocks using FAISS similarity chunks (top 3 per claim)
+    compressed_evidence_lines: List[str] = []
+    seen_source_ids = set()
+
+    for claim in claims:
+        top_chunks: List[Dict[str, Any]] = []
+        if job_id and faiss_service.has_index(job_id):
+            try:
+                top_chunks = faiss_service.search_similar(index_id=job_id, query=claim.text, k=3)
+            except Exception as e:
+                logger.warning(f"FAISS search failed for claim '{claim.id}': {e}")
+
+        if top_chunks:
+            for chunk in top_chunks:
+                src_id = chunk.get("source_id", "src_unknown")
+                if src_id not in seen_source_ids:
+                    seen_source_ids.add(src_id)
+                    title = chunk.get("title", "")
+                    url = chunk.get("url", "")
+                    snippet = chunk.get("snippet", "")[:400].strip()
+                    score = round(float(chunk.get("score", 0.0)), 2)
+                    compressed_evidence_lines.append(
+                        f"[{src_id}] Title: {title} | Score: {score} | URL: {url}\nSummary: {snippet}"
+                    )
+        else:
+            for src in sources[:4]:
+                if src.id not in seen_source_ids:
+                    seen_source_ids.add(src.id)
+                    snippet = src.snippet[:400].strip()
+                    score = round(float(src.score or 0.0), 2)
+                    compressed_evidence_lines.append(
+                        f"[{src.id}] Title: {src.title} | Score: {score} | URL: {src.url}\nSummary: {snippet}"
+                    )
+
+    evidence_text = "\n\n".join(compressed_evidence_lines) if compressed_evidence_lines else "No web source evidence retrieved."
+
+    claims_text_lines = [
+        f"Claim ID: {c.id}\nStatement: {c.text}\nCategory: {c.category}\n"
+        for c in claims
+    ]
+    claims_prompt_block = "\n".join(claims_text_lines)
 
     try:
         provider_clean = (provider or "").lower()
-        if provider_clean == "openai":
-            base_llm = llm_factory.get_openai(temperature=0.0)
-        elif provider_clean == "claude":
-            base_llm = llm_factory.get_anthropic(temperature=0.0)
-        elif provider_clean == "gemini":
-            base_llm = llm_factory.get_gemini(temperature=0.0)
-        else:
-            base_llm = llm_factory.get_default_llm(temperature=0.0)
-
-        structured_llm = base_llm.with_structured_output(VerificationVerdict)
+        base_llm = get_llm(provider=provider_clean, temperature=0.0)
+        structured_llm = base_llm.with_structured_output(BatchVerificationVerdicts)
 
         prompt = (
-            f"Target Claim to Verify:\n"
-            f"ID: {claim.id}\n"
-            f"Statement: {claim.text}\n"
-            f"Category: {claim.category}\n\n"
-            f"Retrieved Evidence Context:\n"
-            f"{context_text}\n\n"
-            f"Evaluate the claim and output the structured verification verdict."
+            f"TARGET CLAIMS TO VERIFY:\n"
+            f"{claims_prompt_block}\n\n"
+            f"COMPRESSED EVIDENCE CONTEXT:\n"
+            f"{evidence_text}\n\n"
+            f"Cross-examine evidence against each claim and return structured JSON verdicts for ALL input claim IDs."
         )
 
         messages = [
@@ -95,23 +145,29 @@ async def verify_claim(
             HumanMessage(content=prompt),
         ]
 
-        verdict_result: VerificationVerdict = await structured_llm.ainvoke(messages)
+        batch_results: BatchVerificationVerdicts = await structured_llm.ainvoke(messages)
+        verdicts_map = {item.claim_id: item for item in batch_results.verdicts}
 
-        claim.verdict = verdict_result.verdict.upper()
-        claim.confidence = round(verdict_result.confidence, 2)
-        claim.reasoning = verdict_result.reasoning
-        claim.supporting_sources = verdict_result.supporting_source_ids
-        claim.contradicting_sources = verdict_result.contradicting_source_ids
+        for claim in claims:
+            if claim.id in verdicts_map:
+                v = verdicts_map[claim.id]
+                claim.verdict = v.verdict.upper()
+                claim.confidence = round(v.confidence, 2)
+                claim.reasoning = v.reasoning
+                claim.supporting_sources = v.supporting_source_ids
+                claim.contradicting_sources = v.contradicting_source_ids
+            else:
+                claim.verdict = "INCONCLUSIVE"
+                claim.confidence = 0.0
+                claim.reasoning = "Verdict missing from batch evaluation."
 
-        logger.info(
-            f"Claim '{claim.id}' verified as {claim.verdict} "
-            f"(confidence={claim.confidence})"
-        )
-        return claim
+        logger.info(f"Successfully batch-verified {len(claims)} claims.")
+        return claims
 
     except Exception as e:
-        logger.error(f"Failed verification for claim '{claim.id}': {e}", exc_info=True)
-        claim.verdict = "INCONCLUSIVE"
-        claim.confidence = 0.0
-        claim.reasoning = f"Verification failed due to error: {str(e)}"
-        return claim
+        logger.error(f"Failed batch verification: {e}", exc_info=True)
+        for claim in claims:
+            claim.verdict = "INCONCLUSIVE"
+            claim.confidence = 0.0
+            claim.reasoning = f"Batch verification failed: {str(e)}"
+        return claims

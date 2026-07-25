@@ -10,7 +10,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.agents.prompts.contradiction_prompts import CONTRADICTION_DETECTOR_SYSTEM_PROMPT
 from app.graph.state import Claim, Source, Contradiction
-from app.services.llm_factory import llm_factory
+from app.llm.llm_factory import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -54,19 +54,14 @@ async def detect_contradictions(
     logger.info(f"Cross-examining {len(sources)} sources across {len(claims)} claims for contradictions.")
 
     claims_text = "\n".join([f"[{c.id}] ({c.category}): {c.text} (Verdict: {c.verdict or 'UNVERIFIED'})" for c in claims])
-    sources_text = "\n".join([f"[{s.id}] {s.title} ({s.url}):\n{s.snippet}\n" for s in sources])
+    sources_text = "\n\n".join([
+        f"[{s.id}] Title: {s.title} | Score: {round(float(s.score or 0.0), 2)} | URL: {s.url}\nSummary: {s.snippet[:400].strip()}"
+        for s in sources[:6]
+    ])
 
     try:
         provider_clean = (provider or "").lower()
-        if provider_clean == "openai":
-            base_llm = llm_factory.get_openai(temperature=0.0)
-        elif provider_clean == "claude":
-            base_llm = llm_factory.get_anthropic(temperature=0.0)
-        elif provider_clean == "gemini":
-            base_llm = llm_factory.get_gemini(temperature=0.0)
-        else:
-            base_llm = llm_factory.get_default_llm(temperature=0.0)
-
+        base_llm = get_llm(provider=provider_clean, temperature=0.0)
         structured_llm = base_llm.with_structured_output(ContradictionReport)
 
         prompt = (

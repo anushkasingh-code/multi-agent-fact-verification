@@ -68,11 +68,12 @@ async def retrieve_and_index_evidence(
                 source_id = f"src_{source_counter:02d}"
                 source_counter += 1
 
+                clean_snippet = item.content[:400].strip() if item.content else ""
                 source_item = Source(
                     id=source_id,
                     url=item.url,
                     title=item.title,
-                    snippet=item.content,
+                    snippet=clean_snippet,
                     domain=item.domain,
                     score=item.score,
                 )

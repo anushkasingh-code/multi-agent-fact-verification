@@ -11,7 +11,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.agents.prompts.extractor_prompts import CLAIM_EXTRACTOR_SYSTEM_PROMPT
 from app.graph.state import Claim
-from app.services.llm_factory import llm_factory
+from app.llm.llm_factory import get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -57,18 +57,7 @@ async def extract_claims(query: str, provider: Optional[str] = None) -> List[Cla
     logger.info(f"Initiating claim extraction using provider='{provider_clean or 'default'}' for query length={len(query)}")
 
     try:
-        if provider_clean == "openai":
-            base_llm = llm_factory.get_openai(temperature=0.0)
-        elif provider_clean == "claude":
-            base_llm = llm_factory.get_anthropic(temperature=0.0)
-        elif provider_clean == "gemini":
-            base_llm = llm_factory.get_gemini(temperature=0.0)
-        else:
-            base_llm = llm_factory.get_default_llm(temperature=0.0)
-
-        model_name = getattr(base_llm, "model_name", getattr(base_llm, "model", "unknown"))
-        logger.info(f"Claim extractor invoking model='{model_name}'")
-
+        base_llm = get_llm(provider=provider_clean, temperature=0.0)
         structured_llm = base_llm.with_structured_output(ExtractedClaimsList)
 
         messages = [
@@ -93,7 +82,7 @@ async def extract_claims(query: str, provider: Optional[str] = None) -> List[Cla
                 )
             )
 
-        logger.info(f"Successfully extracted {len(domain_claims)} atomic claims (IDs: {[c.id for c in domain_claims]}) using model='{model_name}'")
+        logger.info(f"Successfully extracted {len(domain_claims)} atomic claims (IDs: {[c.id for c in domain_claims]})")
         return domain_claims
 
     except Exception as e:
