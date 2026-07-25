@@ -3,7 +3,7 @@ Pydantic schemas for the research analysis API endpoint.
 """
 
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from app.graph.state import Claim, Source, Contradiction
 
 
@@ -20,6 +20,16 @@ class AnalyzeRequest(BaseModel):
         default=None,
         description="Optional primary LLM provider override ('claude', 'openai', or 'gemini')",
     )
+
+    @field_validator("model_provider")
+    @classmethod
+    def validate_model_provider(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v_clean = v.strip().lower()
+            if v_clean not in ("claude", "openai", "gemini"):
+                raise ValueError("model_provider must be one of: 'claude', 'openai', 'gemini'")
+            return v_clean
+        return v
 
 
 class AnalysisSummary(BaseModel):

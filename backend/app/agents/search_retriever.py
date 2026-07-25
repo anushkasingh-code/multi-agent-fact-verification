@@ -4,6 +4,7 @@ Fetches web search evidence for atomic claims via Tavily, embeds text snippets v
 and indexes vectors into a session FAISS index.
 """
 
+import asyncio
 import logging
 from typing import Any, Dict, List, Set, Tuple
 
@@ -52,7 +53,9 @@ async def retrieve_and_index_evidence(
 
     for claim in claims:
         try:
-            search_results: List[SearchResult] = tavily_service.search(
+            print(f"DEBUG: Executing Tavily search for claim '{claim.id}'...")
+            search_results: List[SearchResult] = await asyncio.to_thread(
+                tavily_service.search,
                 query=claim.text,
                 max_results=max_results_per_claim,
             )
@@ -77,6 +80,7 @@ async def retrieve_and_index_evidence(
 
         except Exception as e:
             logger.error(f"Search failed for claim '{claim.id}' ('{claim.text[:40]}...'): {e}", exc_info=True)
+            print(f"DEBUG: Error in Tavily search for claim '{claim.id}': {e}")
 
     if not sources:
         logger.warning(f"No web sources retrieved for job_id='{clean_job_id}'. Skipping vector indexing.")
@@ -86,7 +90,8 @@ async def retrieve_and_index_evidence(
 
     snippets = [src.snippet for src in sources]
     try:
-        embeddings = embedding_service.embed_documents(snippets)
+        print(f"DEBUG: Generating embeddings for {len(snippets)} snippets...")
+        embeddings = await asyncio.to_thread(embedding_service.embed_documents, snippets)
         vector_dim = embedding_service.dimension
 
         metadata_list: List[Dict[str, Any]] = [
@@ -100,8 +105,10 @@ async def retrieve_and_index_evidence(
             for src in sources
         ]
 
-        faiss_service.create_index(index_id=clean_job_id, dimension=vector_dim)
-        faiss_service.add_vectors(
+        print(f"DEBUG: Creating FAISS index for job_id='{clean_job_id}'...")
+        await asyncio.to_thread(faiss_service.create_index, index_id=clean_job_id, dimension=vector_dim)
+        await asyncio.to_thread(
+            faiss_service.add_vectors,
             index_id=clean_job_id,
             vectors=embeddings,
             metadata=metadata_list,
@@ -115,4 +122,5 @@ async def retrieve_and_index_evidence(
 
     except Exception as e:
         logger.error(f"Failed to generate embeddings or index vectors for job_id='{clean_job_id}': {e}", exc_info=True)
-        raise RuntimeError(f"Evidence indexing failed for job_id '{clean_job_id}': {str(e)}") from e
+        print(f"DEBUG: Exception in embedding/FAISS indexing: {e}")
+        return sources, clean_job_id

@@ -25,13 +25,15 @@ async def claim_extractor_node(state: AgentState) -> Dict[str, Any]:
     job_id = state.get("job_id", "")
     query = state.get("user_query", "")
     provider = state.get("model_provider")
-    logger.info(f"[Node: claim_extractor] Processing job_id='{job_id}' (provider={provider})")
+    print(f"DEBUG: Entering claim_extractor_node for job_id='{job_id}'")
 
     try:
         claims = await extract_claims(query=query, provider=provider)
+        print(f"DEBUG: Exiting claim_extractor_node with {len(claims)} claims for job_id='{job_id}'")
         return {"claims": claims}
     except Exception as e:
         logger.error(f"[Node: claim_extractor] Failed for job_id='{job_id}': {e}", exc_info=True)
+        print(f"DEBUG: Error in claim_extractor_node: {e}")
         errors = state.get("errors", []) + [f"Claim extraction failed: {str(e)}"]
         return {"claims": [], "errors": errors}
 
@@ -42,13 +44,15 @@ async def search_retriever_node(state: AgentState) -> Dict[str, Any]:
     """
     job_id = state.get("job_id", "")
     claims = state.get("claims", [])
-    logger.info(f"[Node: search_retriever] Processing job_id='{job_id}' for {len(claims)} claims")
+    print(f"DEBUG: Entering search_retriever_node for job_id='{job_id}' with {len(claims)} claims")
 
     try:
         sources, faiss_index_id = await retrieve_and_index_evidence(job_id=job_id, claims=claims)
+        print(f"DEBUG: Exiting search_retriever_node with {len(sources)} sources for job_id='{job_id}'")
         return {"sources": sources, "faiss_index_id": faiss_index_id}
     except Exception as e:
         logger.error(f"[Node: search_retriever] Failed for job_id='{job_id}': {e}", exc_info=True)
+        print(f"DEBUG: Error in search_retriever_node: {e}")
         errors = state.get("errors", []) + [f"Evidence retrieval failed: {str(e)}"]
         return {"sources": [], "faiss_index_id": job_id, "errors": errors}
 
@@ -61,7 +65,7 @@ async def fact_verifier_node(state: AgentState) -> Dict[str, Any]:
     claims = state.get("claims", [])
     sources = state.get("sources", [])
     provider = state.get("model_provider")
-    logger.info(f"[Node: fact_verifier] Processing job_id='{job_id}' (provider={provider})")
+    print(f"DEBUG: Entering fact_verifier_node for job_id='{job_id}' with {len(claims)} claims and {len(sources)} sources")
 
     verified_claims: List[Claim] = []
     errors = list(state.get("errors", []))
@@ -72,11 +76,13 @@ async def fact_verifier_node(state: AgentState) -> Dict[str, Any]:
             verified_claims.append(verified_claim)
         except Exception as e:
             logger.error(f"[Node: fact_verifier] Error verifying claim '{claim.id}': {e}", exc_info=True)
+            print(f"DEBUG: Error verifying claim '{claim.id}': {e}")
             claim.verdict = "INCONCLUSIVE"
             claim.reasoning = f"Verification failed: {str(e)}"
             verified_claims.append(claim)
             errors.append(f"Verification error for claim {claim.id}: {str(e)}")
 
+    print(f"DEBUG: Exiting fact_verifier_node with {len(verified_claims)} verified claims for job_id='{job_id}'")
     return {"claims": verified_claims, "errors": errors}
 
 
@@ -88,13 +94,15 @@ async def contradiction_detector_node(state: AgentState) -> Dict[str, Any]:
     claims = state.get("claims", [])
     sources = state.get("sources", [])
     provider = state.get("model_provider")
-    logger.info(f"[Node: contradiction_detector] Processing job_id='{job_id}' (provider={provider})")
+    print(f"DEBUG: Entering contradiction_detector_node for job_id='{job_id}'")
 
     try:
         contradictions = await detect_contradictions(claims=claims, sources=sources, provider=provider)
+        print(f"DEBUG: Exiting contradiction_detector_node with {len(contradictions)} contradictions for job_id='{job_id}'")
         return {"contradictions": contradictions}
     except Exception as e:
         logger.error(f"[Node: contradiction_detector] Failed for job_id='{job_id}': {e}", exc_info=True)
+        print(f"DEBUG: Error in contradiction_detector_node: {e}")
         errors = state.get("errors", []) + [f"Contradiction detection failed: {str(e)}"]
         return {"contradictions": [], "errors": errors}
 
@@ -109,7 +117,7 @@ async def report_generator_node(state: AgentState) -> Dict[str, Any]:
     sources = state.get("sources", [])
     contradictions = state.get("contradictions", [])
     provider = state.get("model_provider")
-    logger.info(f"[Node: report_generator] Synthesizing report for job_id='{job_id}' (provider={provider})")
+    print(f"DEBUG: Entering report_generator_node for job_id='{job_id}'")
 
     try:
         report_markdown = await generate_report(
@@ -120,9 +128,11 @@ async def report_generator_node(state: AgentState) -> Dict[str, Any]:
             provider=provider,
         )
         completed_at = datetime.now(timezone.utc).isoformat()
+        print(f"DEBUG: Exiting report_generator_node for job_id='{job_id}'")
         return {"final_report": report_markdown, "completed_at": completed_at}
     except Exception as e:
         logger.error(f"[Node: report_generator] Failed for job_id='{job_id}': {e}", exc_info=True)
+        print(f"DEBUG: Error in report_generator_node: {e}")
         completed_at = datetime.now(timezone.utc).isoformat()
         errors = state.get("errors", []) + [f"Report generation failed: {str(e)}"]
         return {"final_report": f"# Research Report: {query}\n\nReport generation failed: {str(e)}", "completed_at": completed_at, "errors": errors}
@@ -156,8 +166,10 @@ def build_graph() -> StateGraph:
 
 
 # Compile reusable executable graph instance
+print("DEBUG: Compiling LangGraph workflow...")
 workflow = build_graph()
 graph = workflow.compile()
+print("DEBUG: LangGraph workflow compiled successfully")
 
 
 def get_graph():

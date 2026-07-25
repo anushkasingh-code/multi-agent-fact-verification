@@ -29,6 +29,7 @@ async def analyze_research_query(payload: AnalyzeRequest) -> AnalyzeResponse:
     Triggers the 5-agent LangGraph workflow to extract claims, retrieve web evidence,
     cross-verify facts, detect source contradictions, and synthesize a Markdown research paper.
     """
+    print(f"DEBUG: Entering POST /api/v1/analyze endpoint with query='{payload.query[:30]}...'")
     job_id = f"job_{uuid.uuid4().hex[:10]}"
     created_at = datetime.now(timezone.utc).isoformat()
     clean_query = payload.query.strip()
@@ -49,9 +50,12 @@ async def analyze_research_query(payload: AnalyzeRequest) -> AnalyzeResponse:
         "errors": [],
     }
 
+    print(f"DEBUG: Created initial_state for job_id='{job_id}'")
+
     try:
-        # Execute LangGraph multi-agent pipeline
+        print(f"DEBUG: Invoking graph.ainvoke() for job_id='{job_id}'...")
         final_state: AgentState = await graph.ainvoke(initial_state)
+        print(f"DEBUG: Completed graph.ainvoke() for job_id='{job_id}'")
 
         completed_at = final_state.get("completed_at") or datetime.now(timezone.utc).isoformat()
         claims = final_state.get("claims", [])
@@ -91,7 +95,9 @@ async def analyze_research_query(payload: AnalyzeRequest) -> AnalyzeResponse:
         }
 
         try:
+            print(f"DEBUG: Persisting analysis document to MongoDB for job_id='{job_id}'...")
             await mongo_service.create_analysis(mongo_doc)
+            print(f"DEBUG: Successfully persisted document to MongoDB for job_id='{job_id}'")
         except Exception as db_err:
             logger.error(f"Failed to persist analysis doc to MongoDB for job_id='{job_id}': {db_err}")
 
@@ -100,6 +106,7 @@ async def analyze_research_query(payload: AnalyzeRequest) -> AnalyzeResponse:
             f"claims={summary.total_claims}, sources={summary.total_sources})."
         )
 
+        print(f"DEBUG: Returning AnalyzeResponse for job_id='{job_id}'")
         return AnalyzeResponse(
             job_id=job_id,
             status=job_status,
@@ -116,6 +123,7 @@ async def analyze_research_query(payload: AnalyzeRequest) -> AnalyzeResponse:
 
     except Exception as e:
         logger.error(f"Error executing analysis pipeline for job_id='{job_id}': {e}", exc_info=True)
+        print(f"DEBUG: Exception in POST /api/v1/analyze: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Research analysis workflow failed: {str(e)}",

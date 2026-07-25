@@ -84,6 +84,15 @@ class LLMFactory:
                     google_api_key=api_key,
                     temperature=temperature,
                     streaming=streaming,
+                    timeout=30.0,
+                )
+            elif issubclass(client_cls, ChatOpenAI):
+                self._client_cache[cache_key] = client_cls(
+                    model=model_name,
+                    api_key=api_key,
+                    temperature=temperature,
+                    streaming=streaming,
+                    request_timeout=30.0,
                 )
             else:
                 self._client_cache[cache_key] = client_cls(
@@ -91,6 +100,7 @@ class LLMFactory:
                     api_key=api_key,
                     temperature=temperature,
                     streaming=streaming,
+                    timeout=30.0,
                 )
 
         return self._client_cache[cache_key]
@@ -107,7 +117,7 @@ class LLMFactory:
         selected_model = model_name or settings.CLAUDE_MODEL_NAME
         api_key = settings.anthropic_api_key_str
 
-        print("USING PROVIDER: claude")
+        print("DEBUG: USING PROVIDER: claude")
         logger.info("USING PROVIDER: claude")
 
         return self._get_or_create_client(
@@ -131,7 +141,7 @@ class LLMFactory:
         selected_model = model_name or settings.OPENAI_MODEL_NAME
         api_key = settings.openai_api_key_str
 
-        print("USING PROVIDER: openai")
+        print("DEBUG: USING PROVIDER: openai")
         logger.info("USING PROVIDER: openai")
 
         return self._get_or_create_client(
@@ -155,7 +165,7 @@ class LLMFactory:
         selected_model = model_name or settings.GEMINI_MODEL_NAME
         api_key = settings.google_api_key_str
 
-        print(f"USING PROVIDER: gemini\nMODEL: {selected_model}")
+        print(f"DEBUG: USING PROVIDER: gemini | MODEL: {selected_model}")
         logger.info(f"USING PROVIDER: gemini | MODEL: {selected_model}")
 
         return self._get_or_create_client(

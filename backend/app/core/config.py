@@ -24,11 +24,11 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: Optional[SecretStr] = Field(default=None, description="Anthropic API Key")
     GOOGLE_API_KEY: Optional[SecretStr] = Field(default=None, description="Google Gemini API Key")
     DEFAULT_LLM_PROVIDER: Literal["claude", "openai", "gemini"] = Field(
-        default="openai", description="Primary LLM provider to use for agent reasoning"
+        default="gemini", description="Primary LLM provider to use for agent reasoning"
     )
     CLAUDE_MODEL_NAME: str = Field(default="claude-3-5-sonnet-20241022", description="Claude model identifier")
     OPENAI_MODEL_NAME: str = Field(default="gpt-4o", description="OpenAI model identifier")
-    GEMINI_MODEL_NAME: str = Field(default="gemini-2.5-flash", description="Gemini model identifier")
+    GEMINI_MODEL_NAME: str = Field(default="gemini-3.1-flash-lite", description="Gemini model identifier")
 
     # Search Provider
     TAVILY_API_KEY: Optional[SecretStr] = Field(default=None, description="Tavily API Key for live web search")
