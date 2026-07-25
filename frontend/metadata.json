@@ -1,0 +1,6 @@
+{
+  "name": "VeriSphere AI",
+  "description": "Autonomous Multi-Agent Research & Fact Verification Platform",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
