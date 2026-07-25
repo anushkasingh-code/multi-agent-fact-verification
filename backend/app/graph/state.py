@@ -69,6 +69,7 @@ class AgentState(TypedDict):
     """
     job_id: str
     user_query: str
+    model_provider: Optional[str]
     created_at: str
     completed_at: Optional[str]
     claims: List[Claim]

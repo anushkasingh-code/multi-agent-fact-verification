@@ -53,13 +53,13 @@ async def extract_claims(query: str, provider: Optional[str] = None) -> List[Cla
     if not query or not isinstance(query, str) or not query.strip():
         raise ValueError("Input query must be a non-empty string.")
 
-    selected_provider = (provider or "default").lower()
-    logger.info(f"Initiating claim extraction using provider='{selected_provider}' for query length={len(query)}")
+    provider_clean = (provider or "").lower()
+    logger.info(f"Initiating claim extraction using provider='{provider_clean or 'default'}' for query length={len(query)}")
 
     try:
-        if provider == "openai":
+        if provider_clean == "openai":
             base_llm = llm_factory.get_openai(temperature=0.0)
-        elif provider == "claude":
+        elif provider_clean == "claude":
             base_llm = llm_factory.get_anthropic(temperature=0.0)
         else:
             base_llm = llm_factory.get_default_llm(temperature=0.0)
@@ -95,7 +95,7 @@ async def extract_claims(query: str, provider: Optional[str] = None) -> List[Cla
         return domain_claims
 
     except Exception as e:
-        logger.error(f"Failed to extract claims using provider='{selected_provider}': {e}", exc_info=True)
+        logger.error(f"Failed to extract claims using provider='{provider_clean or 'default'}': {e}", exc_info=True)
         if isinstance(e, ValueError):
             raise
         raise RuntimeError(f"Claim extraction agent failed: {str(e)}") from e

@@ -24,10 +24,11 @@ async def claim_extractor_node(state: AgentState) -> Dict[str, Any]:
     """
     job_id = state.get("job_id", "")
     query = state.get("user_query", "")
-    logger.info(f"[Node: claim_extractor] Processing job_id='{job_id}'")
+    provider = state.get("model_provider")
+    logger.info(f"[Node: claim_extractor] Processing job_id='{job_id}' (provider={provider})")
 
     try:
-        claims = await extract_claims(query=query)
+        claims = await extract_claims(query=query, provider=provider)
         return {"claims": claims}
     except Exception as e:
         logger.error(f"[Node: claim_extractor] Failed for job_id='{job_id}': {e}", exc_info=True)
@@ -59,14 +60,15 @@ async def fact_verifier_node(state: AgentState) -> Dict[str, Any]:
     job_id = state.get("job_id", "")
     claims = state.get("claims", [])
     sources = state.get("sources", [])
-    logger.info(f"[Node: fact_verifier] Processing job_id='{job_id}'")
+    provider = state.get("model_provider")
+    logger.info(f"[Node: fact_verifier] Processing job_id='{job_id}' (provider={provider})")
 
     verified_claims: List[Claim] = []
     errors = list(state.get("errors", []))
 
     for claim in claims:
         try:
-            verified_claim = await verify_claim(claim=claim, sources=sources)
+            verified_claim = await verify_claim(claim=claim, sources=sources, provider=provider)
             verified_claims.append(verified_claim)
         except Exception as e:
             logger.error(f"[Node: fact_verifier] Error verifying claim '{claim.id}': {e}", exc_info=True)
@@ -85,10 +87,11 @@ async def contradiction_detector_node(state: AgentState) -> Dict[str, Any]:
     job_id = state.get("job_id", "")
     claims = state.get("claims", [])
     sources = state.get("sources", [])
-    logger.info(f"[Node: contradiction_detector] Processing job_id='{job_id}'")
+    provider = state.get("model_provider")
+    logger.info(f"[Node: contradiction_detector] Processing job_id='{job_id}' (provider={provider})")
 
     try:
-        contradictions = await detect_contradictions(claims=claims, sources=sources)
+        contradictions = await detect_contradictions(claims=claims, sources=sources, provider=provider)
         return {"contradictions": contradictions}
     except Exception as e:
         logger.error(f"[Node: contradiction_detector] Failed for job_id='{job_id}': {e}", exc_info=True)
@@ -105,7 +108,8 @@ async def report_generator_node(state: AgentState) -> Dict[str, Any]:
     claims = state.get("claims", [])
     sources = state.get("sources", [])
     contradictions = state.get("contradictions", [])
-    logger.info(f"[Node: report_generator] Synthesizing report for job_id='{job_id}'")
+    provider = state.get("model_provider")
+    logger.info(f"[Node: report_generator] Synthesizing report for job_id='{job_id}' (provider={provider})")
 
     try:
         report_markdown = await generate_report(
@@ -113,6 +117,7 @@ async def report_generator_node(state: AgentState) -> Dict[str, Any]:
             claims=claims,
             sources=sources,
             contradictions=contradictions,
+            provider=provider,
         )
         completed_at = datetime.now(timezone.utc).isoformat()
         return {"final_report": report_markdown, "completed_at": completed_at}

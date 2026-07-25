@@ -57,9 +57,10 @@ async def detect_contradictions(
     sources_text = "\n".join([f"[{s.id}] {s.title} ({s.url}):\n{s.snippet}\n" for s in sources])
 
     try:
-        if provider == "openai":
+        provider_clean = (provider or "").lower()
+        if provider_clean == "openai":
             base_llm = llm_factory.get_openai(temperature=0.0)
-        elif provider == "claude":
+        elif provider_clean == "claude":
             base_llm = llm_factory.get_anthropic(temperature=0.0)
         else:
             base_llm = llm_factory.get_default_llm(temperature=0.0)

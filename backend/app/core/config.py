@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[SecretStr] = Field(default=None, description="OpenAI API Key")
     ANTHROPIC_API_KEY: Optional[SecretStr] = Field(default=None, description="Anthropic API Key")
     DEFAULT_LLM_PROVIDER: Literal["claude", "openai"] = Field(
-        default="claude", description="Primary LLM provider to use for agent reasoning"
+        default="openai", description="Primary LLM provider to use for agent reasoning"
     )
     CLAUDE_MODEL_NAME: str = Field(default="claude-3-5-sonnet-20241022", description="Claude model identifier")
     OPENAI_MODEL_NAME: str = Field(default="gpt-4o", description="OpenAI model identifier")
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "../.env"),
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",

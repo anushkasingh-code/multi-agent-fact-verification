@@ -68,9 +68,10 @@ async def verify_claim(
     context_text = "\n".join(context_lines) if context_lines else "No web source evidence retrieved."
 
     try:
-        if provider == "openai":
+        provider_clean = (provider or "").lower()
+        if provider_clean == "openai":
             base_llm = llm_factory.get_openai(temperature=0.0)
-        elif provider == "claude":
+        elif provider_clean == "claude":
             base_llm = llm_factory.get_anthropic(temperature=0.0)
         else:
             base_llm = llm_factory.get_default_llm(temperature=0.0)

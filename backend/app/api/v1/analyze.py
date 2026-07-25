@@ -33,11 +33,12 @@ async def analyze_research_query(payload: AnalyzeRequest) -> AnalyzeResponse:
     created_at = datetime.now(timezone.utc).isoformat()
     clean_query = payload.query.strip()
 
-    logger.info(f"Starting research analysis job_id='{job_id}' for query: '{clean_query[:60]}...'")
+    logger.info(f"Starting research analysis job_id='{job_id}' (provider={payload.model_provider}) for query: '{clean_query[:60]}...'")
 
     initial_state: AgentState = {
         "job_id": job_id,
         "user_query": clean_query,
+        "model_provider": payload.model_provider,
         "created_at": created_at,
         "completed_at": None,
         "claims": [],
@@ -77,6 +78,7 @@ async def analyze_research_query(payload: AnalyzeRequest) -> AnalyzeResponse:
         mongo_doc = {
             "job_id": job_id,
             "user_query": clean_query,
+            "model_provider": payload.model_provider,
             "status": job_status,
             "created_at": created_at,
             "completed_at": completed_at,
